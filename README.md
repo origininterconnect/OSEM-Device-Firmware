@@ -1,2 +1,3 @@
 # OSEM-Device-Firmware
-On Surface EXG Measurement Device Firmware for ORIC EXG devices.
+
+On Surface EXG Measurement (OSEM) Device Firmware for devices from OriginInterconneect PVT. LTD.
