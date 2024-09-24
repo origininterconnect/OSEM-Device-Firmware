@@ -2,20 +2,20 @@
 //
 // Commons Clause
 //
-// The Software is provided to you by the Licensor under the License, as 
+// The Software is provided to you by the Licensor under the License, as
 // defined below, subject to the following condition.
 //
-// Without limiting other conditions in the License, the grant of rights 
-// under the License will not include, and the License does not grant you, 
+// Without limiting other conditions in the License, the grant of rights
+// under the License will not include, and the License does not grant you,
 // the right to Sell the Software or use it for any Commercial Purposes.
 //
-// For purposes of the foregoing, “Sell” or "Commercial Purposes" means 
-// practicing any or all of the rights granted to you under the License 
-// to provide to third parties, for a fee or other consideration 
-// (including without limitation fees for hosting or consulting/support 
-// services related to the Software), a product or service whose value 
-// derives, entirely or substantially, from the functionality of the 
-// Software. Any license notice or attribution required by the License 
+// For purposes of the foregoing, “Sell” or "Commercial Purposes" means
+// practicing any or all of the rights granted to you under the License
+// to provide to third parties, for a fee or other consideration
+// (including without limitation fees for hosting or consulting/support
+// services related to the Software), a product or service whose value
+// derives, entirely or substantially, from the functionality of the
+// Software. Any license notice or attribution required by the License
 // must also include this Commons Clause License Condition notice.
 //
 // Software: OSEM-Device-Firmware
@@ -44,9 +44,9 @@
  */
 ADS1299::ADS1299()
 {
-  pinMode(SCK, OUTPUT);
-  pinMode(MOSI, OUTPUT);
-  pinMode(MISO, INPUT);
+    pinMode(SCK, OUTPUT);
+    pinMode(MOSI, OUTPUT);
+    pinMode(MISO, INPUT);
 }
 
 /**
@@ -57,36 +57,35 @@ ADS1299::ADS1299()
  */
 void ADS1299::setup(int _DRDY, int _CS)
 {
-  CS = _CS;
-  DRDY = _DRDY;
-  pinMode(CS, OUTPUT);
-  pinMode(PIN_RST, OUTPUT);
-  pinMode(DRDY, INPUT);
+    CS = _CS;
+    DRDY = _DRDY;
+    pinMode(CS, OUTPUT);
+    pinMode(PIN_RST, OUTPUT);
+    pinMode(DRDY, INPUT);
 
+    digitalWrite(SCK, LOW);
+    digitalWrite(MOSI, LOW);
 
-  digitalWrite(SCK, LOW);
-  digitalWrite(MOSI, LOW);
+    SPI.begin(SCK, MISO, MOSI, CS);
+    SPI.setBitOrder(MSBFIRST);
+    SPI.setFrequency(spiClk);
+    SPI.setDataMode(SPI_MODE1);
 
-  SPI.begin(SCK, MISO, MOSI, CS);
-  SPI.setBitOrder(MSBFIRST);
-  SPI.setFrequency(spiClk);
-  SPI.setDataMode(SPI_MODE1);
+    delay(50);
 
-  delay(50);
+    digitalWrite(PIN_RST, LOW);
+    delayMicroseconds(4);
+    digitalWrite(PIN_RST, HIGH);
+    delayMicroseconds(20);
 
-  digitalWrite(PIN_RST, LOW);
-  delayMicroseconds(4);
-  digitalWrite(PIN_RST, HIGH);
-  delayMicroseconds(20);
+    RESET();
+    delayMicroseconds(20 * TCLK_cycle);
+    SDATAC();
 
-  RESET();
-  delayMicroseconds(20 * TCLK_cycle);
-  SDATAC();
-  
-  WREG(CONFIG1, 0x96);
-  WREG(CONFIG2, 0xC0);
-  WREG(CONFIG3, 0xEC);
-  WREG(MISC1, 0x00);
+    WREG(CONFIG1, 0x96);
+    WREG(CONFIG2, 0xC0);
+    WREG(CONFIG3, 0xEC);
+    WREG(MISC1, 0x00);
 }
 
 /**
@@ -95,10 +94,10 @@ void ADS1299::setup(int _DRDY, int _CS)
  */
 void ADS1299::WAKEUP()
 {
-  digitalWrite(CS, LOW);
-  SPI.transfer(OPCODE_WAKEUP);
-  delayMicroseconds(4 * TCLK_cycle);
-  digitalWrite(CS, HIGH);
+    digitalWrite(CS, LOW);
+    SPI.transfer(OPCODE_WAKEUP);
+    delayMicroseconds(4 * TCLK_cycle);
+    digitalWrite(CS, HIGH);
 }
 /**
  * @brief Put the ADC in Standby
@@ -106,10 +105,10 @@ void ADS1299::WAKEUP()
  */
 void ADS1299::STANDBY()
 {
-  digitalWrite(CS, LOW);
-  SPI.transfer(OPCODE_STANDBY);
-  delayMicroseconds(4 * TCLK_cycle);
-  digitalWrite(CS, HIGH);
+    digitalWrite(CS, LOW);
+    SPI.transfer(OPCODE_STANDBY);
+    delayMicroseconds(4 * TCLK_cycle);
+    digitalWrite(CS, HIGH);
 }
 
 /**
@@ -119,11 +118,11 @@ void ADS1299::STANDBY()
  */
 void ADS1299::RESET()
 {
-  digitalWrite(CS, LOW);
-  delayMicroseconds(TCLK_cycle);
-  SPI.transfer(OPCODE_RESET);
-  delayMicroseconds(18 * TCLK_cycle);
-  digitalWrite(CS, HIGH);
+    digitalWrite(CS, LOW);
+    delayMicroseconds(TCLK_cycle);
+    SPI.transfer(OPCODE_RESET);
+    delayMicroseconds(18 * TCLK_cycle);
+    digitalWrite(CS, HIGH);
 }
 /**
  * @brief Send SPI command or pull START pin LOW, sync multiple ADS
@@ -131,11 +130,11 @@ void ADS1299::RESET()
  */
 void ADS1299::START()
 {
-  digitalWrite(CS, LOW);
-  delayMicroseconds(TCLK_cycle);
-  SPI.transfer(OPCODE_START);
-  delayMicroseconds(4 * TCLK_cycle);
-  digitalWrite(CS, HIGH);
+    digitalWrite(CS, LOW);
+    delayMicroseconds(TCLK_cycle);
+    SPI.transfer(OPCODE_START);
+    delayMicroseconds(4 * TCLK_cycle);
+    digitalWrite(CS, HIGH);
 }
 /**
  * @brief STOP data conversion, allows REGISTER reading/writing
@@ -143,22 +142,22 @@ void ADS1299::START()
  */
 void ADS1299::STOP()
 {
-  digitalWrite(CS, LOW);
-  delayMicroseconds(TCLK_cycle);
-  SPI.transfer(OPCODE_STOP);
-  delayMicroseconds(4 * TCLK_cycle);
-  digitalWrite(CS, HIGH);
+    digitalWrite(CS, LOW);
+    delayMicroseconds(TCLK_cycle);
+    SPI.transfer(OPCODE_STOP);
+    delayMicroseconds(4 * TCLK_cycle);
+    digitalWrite(CS, HIGH);
 }
 /**
  * @brief Read one data chunk from ADS. Transmits 0001 0010 (12h)
  */
 void ADS1299::RDATA()
 {
-  digitalWrite(CS, LOW);
-  delayMicroseconds(TCLK_cycle);
-  SPI.transfer(OPCODE_RDATA);
-  delayMicroseconds(4 * TCLK_cycle);
-  digitalWrite(CS, HIGH);
+    digitalWrite(CS, LOW);
+    delayMicroseconds(TCLK_cycle);
+    SPI.transfer(OPCODE_RDATA);
+    delayMicroseconds(4 * TCLK_cycle);
+    digitalWrite(CS, HIGH);
 }
 
 /**
@@ -166,11 +165,11 @@ void ADS1299::RDATA()
  */
 void ADS1299::RDATAC()
 {
-  digitalWrite(CS, LOW);
-  delayMicroseconds(TCLK_cycle);
-  SPI.transfer(OPCODE_RDATAC);
-  delayMicroseconds(4 * TCLK_cycle);
-  digitalWrite(CS, HIGH);
+    digitalWrite(CS, LOW);
+    delayMicroseconds(TCLK_cycle);
+    SPI.transfer(OPCODE_RDATAC);
+    delayMicroseconds(4 * TCLK_cycle);
+    digitalWrite(CS, HIGH);
 }
 
 /**
@@ -178,12 +177,12 @@ void ADS1299::RDATAC()
  */
 void ADS1299::SDATAC()
 {
-  digitalWrite(CS, LOW);
-  delayMicroseconds(TCLK_cycle);
-  SPI.transfer(OPCODE_SDATAC);
-  delayMicroseconds(4 * TCLK_cycle);
+    digitalWrite(CS, LOW);
+    delayMicroseconds(TCLK_cycle);
+    SPI.transfer(OPCODE_SDATAC);
+    delayMicroseconds(4 * TCLK_cycle);
 
-  digitalWrite(CS, HIGH);
+    digitalWrite(CS, HIGH);
 }
 
 /**
@@ -193,15 +192,15 @@ void ADS1299::SDATAC()
  */
 byte ADS1299::RREG(byte _address)
 {
-  byte opcode1 = OPCODE_RREG + _address;
-  digitalWrite(CS, LOW);
-  delayMicroseconds(TCLK_cycle);
-  SPI.transfer(opcode1);
-  SPI.transfer(0x00);
-  regData[_address] = SPI.transfer(0x00);
-  delayMicroseconds(4 * TCLK_cycle);
-  digitalWrite(CS, HIGH);
-  return regData[_address];
+    byte opcode1 = OPCODE_RREG + _address;
+    digitalWrite(CS, LOW);
+    delayMicroseconds(TCLK_cycle);
+    SPI.transfer(opcode1);
+    SPI.transfer(0x00);
+    regData[_address] = SPI.transfer(0x00);
+    delayMicroseconds(4 * TCLK_cycle);
+    digitalWrite(CS, HIGH);
+    return regData[_address];
 }
 
 /**
@@ -212,14 +211,14 @@ byte ADS1299::RREG(byte _address)
  */
 void ADS1299::WREG(byte _address, byte _value)
 {
-  digitalWrite(CS, LOW);
-  delayMicroseconds(TCLK_cycle);
-  uint8_t opcode1 = OPCODE_WREG + _address;
-  SPI.transfer(opcode1);
-  SPI.transfer(0x00);
-  SPI.transfer(_value);
-  delayMicroseconds(4 * TCLK_cycle);
-  digitalWrite(CS, HIGH);
+    digitalWrite(CS, LOW);
+    delayMicroseconds(TCLK_cycle);
+    uint8_t opcode1 = OPCODE_WREG + _address;
+    SPI.transfer(opcode1);
+    SPI.transfer(0x00);
+    SPI.transfer(_value);
+    delayMicroseconds(4 * TCLK_cycle);
+    digitalWrite(CS, HIGH);
 }
 
 /**
@@ -230,10 +229,10 @@ void ADS1299::WREG(byte _address, byte _value)
  */
 byte ADS1299::getDeviceID()
 {
-  SDATAC();
-  byte data = RREG(ID);
-  RDATAC();
-  return data;
+    SDATAC();
+    byte data = RREG(ID);
+    RDATAC();
+    return data;
 }
 
 /**
@@ -244,11 +243,11 @@ byte ADS1299::getDeviceID()
 
 void ADS1299::activateTestSignals(byte _channeladdress)
 {
-  SDATAC();
-  WREG(CONFIG3, 0xEC);
-  WREG(CONFIG2, 0xD0);
-  WREG(_channeladdress, 0x05);
-  RDATAC();
+    SDATAC();
+    WREG(CONFIG3, 0xEC);
+    WREG(CONFIG2, 0xD0);
+    WREG(_channeladdress, 0x05);
+    RDATAC();
 }
 
 /**
@@ -258,24 +257,29 @@ void ADS1299::activateTestSignals(byte _channeladdress)
 
 void ADS1299::setSingleended(int max_channels, int configvalue)
 {
-  SDATAC();
-  for (int i = 0; i < max_channels; i++)
-  {
-    WREG(CH1SET + i, configvalue);
-  }
-  RDATAC();
+    SDATAC();
+    delay(1000);
+    WREG(CH1SET, configvalue);
+    WREG(CH2SET, configvalue);
+    WREG(CH3SET, configvalue);
+    WREG(CH4SET, configvalue);
+    WREG(CH5SET, configvalue);
+    WREG(CH6SET, configvalue);
+    WREG(CH7SET, configvalue);
+    WREG(CH8SET, configvalue);
+    RDATAC();
 }
 
 uint8_t ADS1299::readData(uint8_t *status, uint8_t *data)
 {
-  memset(status, 0, ADS_STATUS_SIZE);
-  memset(data, 0, ADS_DATA_SIZE);
-  digitalWrite(CS, LOW);
-  delayMicroseconds( TCLK_cycle);
+    memset(status, 0, ADS_STATUS_SIZE);
+    memset(data, 0, ADS_DATA_SIZE);
+    digitalWrite(CS, LOW);
+    delayMicroseconds(TCLK_cycle);
 
-  SPI.transfer(status, ADS_STATUS_SIZE);
-  SPI.transfer(data, ADS_DATA_SIZE);
-  delayMicroseconds(4 * TCLK_cycle);
-  digitalWrite(CS, HIGH);
-  return 0;
+    SPI.transfer(status, ADS_STATUS_SIZE);
+    SPI.transfer(data, ADS_DATA_SIZE);
+    delayMicroseconds(4 * TCLK_cycle);
+    digitalWrite(CS, HIGH);
+    return 0;
 }

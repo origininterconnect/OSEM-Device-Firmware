@@ -36,23 +36,22 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef _ESPC3_H_
-#define _ESPC3_H_
+#ifndef _ESPS3_H_
+#define _ESPS3_H_
 
-#define PIN_CS 7 // active low
-#define PIN_MISO 10
-#define PIN_MOSI 3
-#define PIN_SCLK 2
+#define PIN_CS 18 // active low
+#define PIN_MISO 37
+#define PIN_MOSI 35
+#define PIN_SCLK 36
 
-#define PIN_RST 1 // active lOW
-#define PIN_DRDY 0 // active lOW
-
-#define PIN_NEO 6
+#define PIN_RST 38 // active lOW
+#define PIN_DRDY 39 // active lOW
+#define PIN_NEO 17
 
 #define PIXEL_BRIGHTNESS 7
-#define TRIGGER_PIN 9   // This pin will be checked for to go in OTA mode
+#define TRIGGER_PIN 0          // This pin will be checked for to go in OTA mode
 
-#define spiClk 17000000 // SCLK
+#define spiClk 8000000 //2Mhz  // 1.5Mhz to 2.4Mhz according to ADS1299 datasheet page 12
 #define TCLK_cycle 0.5 // 1/2Mhz = 0.5us
 
 #endif
