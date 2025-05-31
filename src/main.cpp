@@ -20,6 +20,7 @@
  *
  */
 
+#include <Wire.h>
 #include <ads129x.h>
 #include <adscommand.h>
 #include <wscommand.h>
@@ -40,9 +41,21 @@ const char *password = "";
 #define ADS_STATUS_SIZE 3
 #define BLOCK_SIZE 32 // Data + Timestamp + Counter
 #define SAMPLES_PER_BUFFER 250
-#define PACKET_SIZE (BLOCK_SIZE * SAMPLES_PER_BUFFER)
+#define PACKET_SIZE (BLOCK_SIZE * SAMPLES_PER_BUFFER + 1) // +1 for the battery percentage byte
 #define NUM_BUFFERS 20
 #define MAX_PAYLOAD_SIZE 256
+#define BATTERY_ADDRESS 0x55 // I2C address of BQ27546
+#define BATTERY_SOC_REGISTER 0x2C // Register for State of Charge
+#define BATTERY_READ_INTERVAL 1000 // Read battery every 1 second
+
+union
+{
+    uint8_t battery_byte;
+    uint8_t battery_percentage;
+} battery_union;
+
+uint8_t latest_battery_percentage = 0;
+unsigned long last_battery_read = 0;
 
 uint8_t data_buffers[NUM_BUFFERS][PACKET_SIZE];
 volatile int current_buffer_index = 0;
@@ -112,8 +125,44 @@ void readRegisterCommand(unsigned char unused1, unsigned char unused2);
 void writeRegisterCommand(unsigned char register_number, unsigned char register_value);
 void helpCommand(unsigned char unused1, unsigned char unused2);
 
+uint8_t readBatteryPercentage() {
+    Wire.beginTransmission(BATTERY_ADDRESS);
+    Wire.write(BATTERY_SOC_REGISTER);
+    if (Wire.endTransmission(false) != 0) {
+        return 0xFF; // Transmission failed, return invalid value
+    }
+    
+    Wire.requestFrom(BATTERY_ADDRESS, 2);
+    if (Wire.available() < 2) {
+        return 0xFF; // Not enough data received
+    }
+    
+    // Read low and high byte (little-endian format)
+    uint8_t soc_low = Wire.read();
+    uint8_t soc_high = Wire.read();
+    uint16_t soc = soc_low | (soc_high << 8);
+    
+    // SOC is typically returned as percentage (0-100)
+    // If it's over 100, return 0xFF as error
+    return (soc > 100) ? 0xFF : (uint8_t)soc;
+}
+
 void setup()
 {
+    Wire.begin(4, 5); // Initialize I2C with SDA=4, SCL=5
+
+    uint8_t battery_level = readBatteryPercentage();
+    while (battery_level <= 10 && battery_level != 0xFF) {
+        pixels.begin();
+        pixels.setPixelColor(0, pixels.Color(255, 0, 0));
+        pixels.show();
+        delay(500);
+        pixels.setPixelColor(0, pixels.Color(0, 0, 0));
+        pixels.show();
+        delay(500);
+        battery_level = readBatteryPercentage();
+    }
+
     Serial.begin(BAUD_RATE);
     while (!Serial)
     {
@@ -239,6 +288,13 @@ void setup()
 
 void loop()
 {
+    // Read battery percentage periodically (not in ISR)
+    unsigned long current_time = millis();
+    if (current_time - last_battery_read >= BATTERY_READ_INTERVAL) {
+        latest_battery_percentage = readBatteryPercentage();
+        last_battery_read = current_time;
+    }
+
     if (buffer_completed[buffer_to_send])
     {
         // Send the current buffer via WebSocket
@@ -468,10 +524,17 @@ void sdatacCommand(unsigned char unused1, unsigned char unused2)
 {
     using namespace ADS129x;
     is_rdatac = false;
+
+    // Wait a bit to ensure no more ISR calls
+    delayMicroseconds(100);
+
+
     current_buffer_index = 0;
     current_sample_index = 0;
     memset((void*)buffer_completed, 0, sizeof(buffer_completed));
     buffer_to_send = 0;
+    // Reset sample numbering
+    sample_number_union.sample_number = 0;
     adcSendCommand(SDATAC);
     using namespace ADS129x;
     send_response_ok();
@@ -521,7 +584,7 @@ void IRAM_ATTR DRDY_ISR(void)
     if (buffer_completed[current_buffer_index])
     {
         // The current buffer is still full and not sent yet, we skip  this write to avoid overflow
-        ESP_LOGD("ERROR", "Buffer Overflow detected at buffer %d", current_buffer_index);
+        // ESP_LOGD("ERROR", "Buffer Overflow detected at buffer %d", current_buffer_index);
         return;
     }
     // Get a pointer to the current position in the buffer
@@ -546,6 +609,9 @@ void IRAM_ATTR DRDY_ISR(void)
 
     if (current_sample_index >= SAMPLES_PER_BUFFER)
     {
+        // Use the cached battery percentage (read in main loop)
+        data_buffers[current_buffer_index][PACKET_SIZE - 1] = latest_battery_percentage;
+
         // Mark the current buffer as completed
         buffer_completed[current_buffer_index] = true;
 
@@ -614,6 +680,7 @@ void adsSetup()
 void espSetup()
 {
     using namespace ADS129x;
+    // Add I2C initialization at the beginning
     // prepare pins to be outputs or inputs
     // pinMode(PIN_SCLK, OUTPUT); //optional - SPI library will do this for us
     // pinMode(PIN_DIN, OUTPUT); //optional - SPI library will do this for us
