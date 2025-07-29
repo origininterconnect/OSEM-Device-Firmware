@@ -29,6 +29,9 @@
 #include <WiFiManager.h>
 #include <ESPmDNS.h>
 #include <Adafruit_NeoPixel.h>
+#include <Adafruit_MPU6050.h>
+#include <Adafruit_Sensor.h>
+#include <Wire.h>
 
 const char *ssid = "ORIC-EEG";
 const char *password = "";
@@ -39,8 +42,8 @@ const char *password = "";
 #define ADS_DATA_SIZE (CHANNELS * 3)
 #define ADS_STATUS_SIZE 3
 #define BLOCK_SIZE 32 // Data + Timestamp + Counter
-#define SAMPLES_PER_BUFFER 250
-#define PACKET_SIZE (BLOCK_SIZE * SAMPLES_PER_BUFFER)
+#define SAMPLES_PER_BUFFER 10
+#define PACKET_SIZE (BLOCK_SIZE * SAMPLES_PER_BUFFER + 6)
 #define NUM_BUFFERS 20
 #define MAX_PAYLOAD_SIZE 256
 
@@ -61,6 +64,31 @@ int max_channels = 0;
 int num_active_channels = 0;
 boolean active_channels[9];
 boolean is_rdatac = false;
+
+// accelerometer data
+#define ACCEL_DATA_SIZE_IN_BYTES 6
+union
+{
+    uint8_t accel_bytes[ACCEL_DATA_SIZE_IN_BYTES];
+    struct {
+        int16_t x;
+        int16_t y;
+        int16_t z;
+    } accel;
+} accel_union;
+
+// MPU6050 setup
+Adafruit_MPU6050 mpu;
+const float INV_X = 1.0;
+const float INV_Y = 1.0; 
+const float INV_Z = 1.0;
+const int CAL_SAMPLES = 200;
+const float CAL_DELAY_MS = 5.0;
+float offsetX = 0.0;
+float offsetY = 0.0;
+float offsetZ = 0.0;
+bool mpu_initialized = false;
+
 
 // microseconds timestamp
 #define TIMESTAMP_SIZE_IN_BYTES 4
@@ -112,6 +140,60 @@ void readRegisterCommand(unsigned char unused1, unsigned char unused2);
 void writeRegisterCommand(unsigned char register_number, unsigned char register_value);
 void helpCommand(unsigned char unused1, unsigned char unused2);
 
+void mpuSetup() {
+    Wire.begin();
+    Wire.setClock(400000);
+    
+    if (!mpu.begin()) {
+        ESP_LOGE("MPU6050", "MPU not found!");
+        mpu_initialized = false;
+        return;
+    }
+    
+    mpu.setFilterBandwidth(MPU6050_BAND_260_HZ);
+    delay(100);
+    
+    // Quick calibration
+    float sumX = 0, sumY = 0, sumZ = 0;
+    sensors_event_t a, g, temp;
+    
+    for (int i = 0; i < CAL_SAMPLES; i++) {
+        mpu.getEvent(&a, &g, &temp);
+        sumX += a.acceleration.x;
+        sumY += a.acceleration.y;
+        sumZ += a.acceleration.z;
+        delay(CAL_DELAY_MS);
+    }
+    
+    offsetX = sumX / CAL_SAMPLES;
+    offsetY = sumY / CAL_SAMPLES;
+    offsetZ = sumZ / CAL_SAMPLES;
+    
+    mpu_initialized = true;
+    ESP_LOGD("MPU6050", "MPU6050 initialized and calibrated");
+}
+
+void readAccelerometer() {
+    if (!mpu_initialized) {
+        accel_union.accel.x = 0;
+        accel_union.accel.y = 0;
+        accel_union.accel.z = 0;
+        return;
+    }
+    
+    sensors_event_t a, g, temp;
+    mpu.getEvent(&a, &g, &temp);
+    
+    float ax = (a.acceleration.x - offsetX) * INV_X;
+    float ay = (a.acceleration.y - offsetY) * INV_Y;
+    float az = (a.acceleration.z - offsetZ) * INV_Z;
+    
+    // Convert to int16_t (multiply by 1000 for precision)
+    accel_union.accel.x = (int16_t)(ax * 1000);
+    accel_union.accel.y = (int16_t)(ay * 1000);
+    accel_union.accel.z = (int16_t)(az * 1000);
+}
+
 void setup()
 {
     Serial.begin(BAUD_RATE);
@@ -123,6 +205,7 @@ void setup()
     // Hardware setup
     espSetup();
     adsSetup();
+    mpuSetup();
 
     // Setup callbacks for SerialCommand commands
     wsCommand.addCommand("nop", nopCommand);                   // No operation (does nothing)
@@ -241,10 +324,17 @@ void loop()
 {
     if (buffer_completed[buffer_to_send])
     {
+        // Read accelerometer data once per packet
+        readAccelerometer();
+        
+        // Add accelerometer data to the end of the packet
+        uint8_t *accel_ptr = &data_buffers[buffer_to_send][BLOCK_SIZE * SAMPLES_PER_BUFFER];
+        memcpy(accel_ptr, accel_union.accel_bytes, ACCEL_DATA_SIZE_IN_BYTES);
+
         // Send the current buffer via WebSocket
         webSocket.sendBIN(0, (uint8_t *)&data_buffers[buffer_to_send], PACKET_SIZE);
         
-        vTaskDelay(20 / portTICK_PERIOD_MS);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
         // Move to the next buffer in sequence
         buffer_completed[buffer_to_send] = false;
         buffer_to_send = (buffer_to_send + 1) % NUM_BUFFERS;
@@ -262,6 +352,7 @@ void webSocketEvent(byte num, WStype_t type, uint8_t *payload, size_t length)
         ESP_LOGD("WEBSOCKET", "Client %d disconnected", num);
         pixels.setPixelColor(0, pixels.Color(PIXEL_BRIGHTNESS, PIXEL_BRIGHTNESS, 0)); // Yellow
         pixels.show();
+        ESP.restart();
         break;
     case WStype_CONNECTED: // if a client is connected, then type == WStype_CONNECTED
         ESP_LOGD("WEBSOCKET", "Client %d connected", num);
